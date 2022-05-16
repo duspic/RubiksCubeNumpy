@@ -5,109 +5,12 @@ class Rubik():
   def __init__(self):
     self.linedim = 50 # how many px per row width or column height
     self.side_shape = np.array((3,3))*self.linedim
-    self.side_0 = np.zeros((self.side_shape), dtype=int)
-    self.side_1 = np.zeros((self.side_shape), dtype=int) + 1
-    self.side_2 = np.zeros((self.side_shape), dtype=int) + 2
-    self.side_3 = np.zeros((self.side_shape), dtype=int) + 3
-    self.side_4 = np.zeros((self.side_shape), dtype=int) + 4
-    self.side_5 = np.zeros((self.side_shape), dtype=int) + 5
-
-    return
-
-  def rotation_yz(self, direction, col=None):
-    '''
-    direction -> 1 or -1
-    col -> 1,2 or 3
-    '''
-
-    affected_sides = np.array([self.side_0, self.side_3, self.side_1, self.side_2])
-    rot_tensor = np.stack(affected_sides)
-
-    from_col = (col-1)*self.linedim
-    to_col = col*self.linedim
-
-    #rot_tensor[:, :, from_col:to_col] = np.roll(rot_tensor[:, :, from_col:to_col],(3*self.linedim)**2 * direction)
-    rot_tensor[:, :, from_col:to_col] = np.roll(rot_tensor[:, :, from_col:to_col], 3*direction, axis=0)
-    
-    self.side_0, self.side_3, self.side_1, self.side_2 = rot_tensor
-
-    return
-
-  def rotation_xz(self, direction, row=None):
-    '''
-    direction -> 1 or -1
-    row -> 1,2 or 3
-    '''
-
-    affected_sides = np.array([self.side_1, self.side_5, self.side_0, self.side_4])
-    rot_tensor = np.stack(affected_sides)
-
-    from_row = (row-1)*self.linedim
-    to_row = row*self.linedim
-
-    rot_tensor[:,from_row:to_row, :] = np.roll(rot_tensor[:,from_row:to_row, :], 3*direction, axis=0)
-    self.side_1, self.side_5, self.side_0, self.side_4 = rot_tensor
-
-    return
-
-  def rotate_left(self, row=None):
-    '''
-    Rotate row of choice to the left (top row=1, middle=2, bottom=3)
-    If no row is chosen, the entire cube is rotated, the right side becomes
-    the front.
-    '''
-    if not row:
-      for i in [1,2,3]:
-        self.rotation_xz(direction=1, row=i)
-    else:
-      self.rotation_xz(direction=1, row=row)
-
-    return
-
-  def rotate_right(self, row=None):
-    '''
-    Rotate row of choice to the right (top row=1, middle=2, bottom=3)
-    If no row is chosen, the entire cube is rotated, the left side becomes
-    the front.
-    '''
-    if not row:
-      for i in [1,2,3]:
-        self.rotation_xz(direction=-1, row=i)
-    else:
-      self.rotation_xz(direction=-1, row=row)
-
-    return
-
-  def rotate_up(self, col=None):
-    '''
-    Rotate column of choice upwards (left column=1, middle=2, right=3)
-    If no column is chosen, the entire cube is rotated, the down side becomes
-    the front.
-    '''
-
-    if not col:
-      for i in [1,2,3]:
-        self.rotation_yz(direction=1, col=i)
-    else:
-      self.rotation_yz(direction=1, col=col)
-
-    return
-
-  def rotate_down(self, col=None):
-    '''
-    Rotate column of choice downwards (left column=1, middle=2, right=3)
-    If no column is chosen, the entire cube is rotated, the upper side becomes
-    the front.
-    '''
-
-    if not col:
-      for i in [1,2,3]:
-        self.rotation_yz(direction=-1, col=i)
-    else:
-      self.rotation_yz(direction=-1, col=col)
-
-    return
-
+    self.hind = np.zeros(self.side_shape)
+    self.front = self.hind + 1
+    self.bot = self.front + 1
+    self.top = self.bot + 1
+    self.left = self.top + 1
+    self.right = self.left + 1
 
   def visualize(self):
     # white -> 0
@@ -116,12 +19,12 @@ class Rubik():
     # red -> 3
     # green -> 4
     # blue -> 5
-    
-    empty = np.zeros_like(self.side_0) -1
+  
+    empty = np.zeros_like(self.hind) -1
 
-    first_row = np.hstack((empty, self.side_0, empty, empty))
-    second_row = np.hstack((self.side_4, self.side_3, self.side_5, self.side_2))
-    third_row = np.hstack((empty, self.side_1, empty, empty))
+    first_row = np.hstack((empty, self.hind, empty, empty))
+    second_row = np.hstack((self.left, self.top, self.right, self.bot))
+    third_row = np.hstack((empty, self.front, empty, empty))
     res = np.vstack((first_row, second_row, third_row))
 
     res = self.convert_to_colors(res)
@@ -175,6 +78,202 @@ class Rubik():
     
     return np.stack((layer_3,layer_2,layer_1),axis=2)
 
+
+  def rotate_X(self, row=None, direction=1):
+    '''
+    Chains all involved sides together and switches values between them
+    based on the specified direction and rows
+    '''
+
+    self.prepare_for_X_rotation()
+
+    chained_sides = np.array([self.front, self.right, self.hind, self.left])
+    
+    if row:
+      from_row = self.linedim * (row-1)
+      to_row = self.linedim * row
+    
+    else:
+      from_row = 0
+      to_row = None
+
+    # this is where the magic happens
+    chained_sides[:,from_row:to_row,:] = np.roll(chained_sides,direction,0)[:,from_row:to_row,:]
+    
+    self.front, self.right, self.hind, self.left = chained_sides
+    self.revert_preparation_for_X_rotation()
+
+    self.ministry_of_spatial_relations(axis='X', direction=direction, row=row)
+
+
+  def rotate_Y(self, col=None, direction=1):
+    '''
+    Chains all involved sides together and switches values between them
+    based on the specified direction and columns
+    '''
+
+    self.prepare_for_Y_rotation()
+
+    chained_sides = np.array([self.front, self.top, self.hind, self.bot])
+    
+    if col:
+      from_col = self.linedim * (col-1)
+      to_col = self.linedim * col
+    
+    else:
+      from_col = 0
+      to_col = None
+
+    # this is where the magic happens
+    chained_sides[:,:,from_col:to_col] = np.roll(chained_sides,direction,0)[:,:,from_col:to_col]
+    
+    self.front, self.top, self.hind, self.bot = chained_sides
+    self.revert_preparation_for_Y_rotation()
+
+    self.ministry_of_spatial_relations(axis='Y', direction=direction, col=col)
+
+  def ministry_of_spatial_relations(self, axis, direction, row=None, col=None):
+    ''' 
+    takes care of the relations between sides in the 3d form
+    for example, when a top row is rotated on the FRONT side, it not only
+    rotates the top row on RIGHT, HIND and LEFT side, but also rotates the
+    entire TOP side itself
+    '''
+
+    if axis == 'X':
+      if row == 1:
+        # top row rotates the TOP side
+        self.top = np.rot90(self.top, direction)
+
+      elif row == 3:
+        # bottom row rotates the BOT side
+        self.bot = np.rot90(self.bot, -direction)
+
+      elif not row:
+        # both TOP and BOT sides rotate if all rows do
+        self.top = np.rot90(self.top, direction)
+        self.bot = np.rot90(self.bot, -direction)
+
+    elif axis == 'Y':
+      if col == 1:
+        # left column rotates the LEFT side
+        self.left = np.rot90(self.left, direction)
+
+      elif col == 3:
+        # right column rotates the RIGHT side
+        self.right = np.rot90(self.right, -direction)
+
+      elif not row:
+        # bot LEFT and RIGHT sides rotate if all columns do
+        self.left = np.rot90(self.left, direction)
+        self.right = np.rot90(self.right, -direction)
+    
+    return
+
+  def rotate_right(self, row=None):
+    '''
+    Wrapper for "rotate_X" function, with determined direction
+
+    Row -> {1, 2, 3, None}
+    1 being the topmost, 2 in the middle, 3 on the bottom
+
+    If not specified, defaults to None and rotates all 3 rows
+    
+    '''
+    self.rotate_X(row=row, direction=1)
+
+  def rotate_left(self, row=None):
+    '''
+    Wrapper for "rotate_X" function, with determined direction
+
+    Row -> {1, 2, 3, None}
+    1 being the topmost, 2 in the middle, 3 on the bottom
+
+    If not specified, defaults to None and rotates all 3 rows
+    '''
+    self.rotate_X(row=row, direction=-1)
+
+
+  def rotate_up(self, col=None):
+    '''
+    Wrapper for "rotate_Y" function, with determined direction
+
+    Col -> {1, 2, 3, None}
+    1 being the leftmost, 2 in the middle, 3 on the right
+
+    If not specified, defaults to None and rotates all 3 columns
+    '''
+    self.rotate_Y(col=col, direction=1)
+
+
+  def rotate_down(self, col=None):
+    '''
+    Wrapper for "rotate_Y" function, with determined direction
+
+    Col -> {1, 2, 3, None}
+    1 being the leftmost, 2 in the middle, 3 on the right
+
+    If not specified, defaults to None and rotates all 3 columns
+    '''
+    self.rotate_Y(col=col, direction=-1)
+
+  def prepare_for_X_rotation(self):
+    '''
+    visualized arrays are rotated according to their position relative
+    to the TOP side, so they're in need of "arranging"
+
+    for example, when looking at the flattened cube, on the LEFT side 
+    the topmost line is visualized as being the rightmost (that side
+    is the one closest to the TOP side, and furthest from the BOT side)
+
+    so a rotation of 90 degrees counter clockwise is needed to get
+    the topmost line at the actual top of the numpy matrix.
+
+    this is needed only for ease of working with matrices, and is reverted
+    later on
+    '''
+
+    self.right = np.rot90(self.right,-1)
+    self.left = np.rot90(self.left,1)
+    self.hind = np.rot90(self.hind,-2)
+  
+  def revert_preparation_for_X_rotation(self):
+    '''
+    undo the "allignment" done by the "prepare_for_X_rotation" function
+    
+    '''
+    self.right = np.rot90(self.right,1)
+    self.left = np.rot90(self.left,-1)
+    self.hind = np.rot90(self.hind,2)
+
+
+  
+  def prepare_for_Y_rotation(self):
+    '''
+    visualized arrays are rotated according to their position relative
+    to the TOP side, so they're in need of "arranging"
+
+    for example, when looking at the flattened cube, on the HIND side 
+    the topmost line is visualized as being the downmost (that side
+    is the one closest to the TOP side, and furthest from the BOT side)
+
+    so a rotation of 180 degrees is needed to get
+    the topmost line at the actual top of the numpy matrix.
+
+    this is needed only for ease of working with matrices, and is reverted
+    later on
+    '''
+    self.bot = np.rot90(self.bot, 2)
+
+
+  def revert_preparation_for_Y_rotation(self):
+    '''
+    undo the "allignment" done by the "prepare_for_Y_rotation" function
+    
+    '''
+    self.bot = np.rot90(self.bot, -2)
+
+
   def randomize(self, steps: int=2):
 
     '''
@@ -187,6 +286,7 @@ class Rubik():
     rnd_choices =(None, 1, 2, 3)
     rot_log = {}
 
+    # max step cap
     if steps > 10:
       steps = 10
     
@@ -209,4 +309,3 @@ class Rubik():
       rot_log[str(i) + '_down: ' + str(choice)] = self.visualize()
 
     return rot_log
-
